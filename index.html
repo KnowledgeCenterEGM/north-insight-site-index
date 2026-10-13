@@ -162,7 +162,10 @@ var CONFIG = {
   //               את התכונה sandbox ל-iframe של ווידג'ט Embed עבור כל דומיין
   //               שאינו *.arcgis.com — ולכן '_top' ייחסם כשהדף מתארח ב-Vercel.
   //               בחרו '_top' רק אם הדף עצמו מתארח תחת *.arcgis.com.
-  linkTarget: '_blank',
+  //    '_self'  = אותה לשונית (ברירת המחדל כאן). בתוך האפליקציה, האינדקס שולח
+  //               לאפליקציה הודעה עם מזהה העמוד והיא עוברת אליו באותה לשונית
+  //               (ראו "מעבר עמוד באותה לשונית" למטה). אם אין מענה, נפתחת לשונית חדשה.
+  linkTarget: '_self',
 
   // 4) צפיפות התצוגה: 'comfortable' או 'compact'
   density: 'comfortable',
@@ -406,6 +409,38 @@ var TOPICS = [
       if (!w) blockedNote(href);
     }, 900);
   }, true);
+
+  /* מעבר עמוד באותה לשונית, כשהאינדקס מוטמע באפליקציה.
+     ה-iframe של ווידג'ט Embed חסום לניווט העליון, ולכן האינדקס שולח לאפליקציה
+     המארחת הודעה { type: 'eshkol-index:navigate', page: 'page_17' } והיא עוברת
+     לעמוד בעצמה (מאזין ב-index.html של האפליקציה, מקבל רק את הדומיין הזה).
+     אם לא מגיע אישור תוך שנייה - האינדקס מוטמע במקום אחר - נפתחת לשונית חדשה. */
+  var embedded = window.parent && window.parent !== window;
+  var waiting = null;
+  window.addEventListener('message', function (e) {
+    if (e.source === window.parent && e.data && e.data.type === 'eshkol-index:ack' && waiting) {
+      clearTimeout(waiting);
+      waiting = null;
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.page-btn, a.item-link');
+    if (!a || !embedded || a.target !== '_self') return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;  // פתיחה מכוונת בלשונית חדשה
+    var page = new URL(a.href).searchParams.get('page');
+    if (!page) return;
+    e.preventDefault();
+    var href = a.href;
+    window.parent.postMessage({ type: 'eshkol-index:navigate', page: page }, '*');
+    if (waiting) clearTimeout(waiting);
+    waiting = setTimeout(function () {
+      waiting = null;
+      var w = null;
+      try { w = window.open(href, '_blank', 'noopener'); } catch (err) {}
+      if (!w) blockedNote(href);
+    }, 1000);
+  });
 
   render();
 })();
